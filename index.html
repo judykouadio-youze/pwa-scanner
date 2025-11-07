@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Superviseur – Scanner</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b74de">
+
+<style>
+  body{font-family:system-ui,Arial,sans-serif;background:#f5f7fb;margin:0;padding:16px;display:flex;justify-content:center}
+  .card{width:100%;max-width:560px;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:18px}
+  h1{margin:.2rem 0 1rem}
+  input,button{width:100%;padding:12px;border-radius:10px;border:1px solid #ccd2dd;margin:.35rem 0;font-size:16px}
+  button{background:#0b74de;color:#fff;border:none;font-weight:600}
+  #video{width:100%;height:auto;border-radius:12px;background:#000;margin-top:10px}
+  #status{margin-top:10px;font-weight:600}
+  .muted{color:#6b7280}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🔐 Scanner – Superviseur</h1>
+
+  <!-- 🔁 1) https://script.google.com/macros/s/AKfycbxOGgvQonRSqyySzGbwKc_pzsY8p8j5tSvWwW5S2iVPyzxfoiygxBe-guKgwMQT03x_Og/exec  -->
+  <input id="exec" placeholder="URL Web App /exec" value="YOUR_EXEC_URL">
+
+  <!-- 🔁 2) SUP-TEAG-SOP097 -->
+  <input id="token" placeholder="Token superviseur" value="DEFAULT_TOKEN">
+
+  <button id="start">VÉRIFIER & DÉMARRER</button>
+  <div id="status" class="muted">Prêt.</div>
+  <video id="video" playsinline></video>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const statusEl = $("#status"), video = $("#video"), btn = $("#start");
+let stream = null, detector = null;
+
+async function checkToken(execUrl, token){
+  const r = await fetch(execUrl + "?check=token&token=" + encodeURIComponent(token));
+  return (await r.text()).trim();
+}
+
+async function startCamera(){
+  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+  video.srcObject = stream;
+  await video.play();
+}
+
+async function scanLoop(execUrl, token){
+  if ('BarcodeDetector' in window) {
+    detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const loop = async () => {
+      try {
+        const codes = await detector.detect(video);
+        if (codes && codes.length){
+          const payload = codes[0].rawValue;
+          await sendToServer(execUrl, token, payload);
+          stopCamera();
+          return;
+        }
+      } catch(e){}
+      requestAnimationFrame(loop);
+    };
+    loop();
+  } else {
+    statusEl.innerHTML = "⚠️ Votre navigateur ne supporte pas le scan (BarcodeDetector). Utilisez Chrome Android/iOS récent.";
+  }
+}
+
+function addTokenToUrl(execUrl, token, payload){
+  if (payload.startsWith("http")) {
+    const u = new URL(payload);
+    if(!u.searchParams.get("token")) u.searchParams.set("token", token);
+    return u.toString();
+  }
+  // payload de type: "matricule=...&nom=...&prenom=...&equipe=...&type=..."
+  return execUrl + "?" + payload + "&token=" + encodeURIComponent(token);
+}
+
+async function sendToServer(execUrl, token, payload){
+  statusEl.textContent = "⏳ QR détecté, envoi...";
+  const finalUrl = addTokenToUrl(execUrl, token, payload);
+  const r = await fetch(finalUrl);
+  const txt = await r.text();
+  statusEl.innerHTML = "✅ " + txt;
+}
+
+function stopCamera(){ if (stream) stream.getTracks().forEach(t => t.stop()); }
+
+btn.addEventListener("click", async ()=>{
+  const execUrl = $("#exec").value.trim();
+  const token = $("#token").value.trim();
+  if(!execUrl || !token){ statusEl.innerHTML = "❌ Renseigne l’URL et le token."; return; }
+
+  statusEl.textContent = "⏳ Vérification du token…";
+  try{
+    const ok = await checkToken(execUrl, token);
+    if(!ok.startsWith("OK")){ statusEl.innerHTML = "❌ Token invalide."; return; }
+    statusEl.innerHTML = "✅ Token validé. Ouverture caméra…";
+    await startCamera();
+    await scanLoop(execUrl, token);
+  }catch(e){
+    statusEl.innerHTML = "❌ Erreur : " + e.message + '<br><span class="muted">Vérifie que le site a l’autorisation Caméra.</span>';
+  }
+});
+
+// Enregistrement service worker pour l’installation
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js"));
+}
+</script>
+</body>
+</html>
