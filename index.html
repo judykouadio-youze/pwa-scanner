@@ -1,118 +1,126 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Superviseur – Scanner</title>
-
-<!-- PWA -->
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0b74de">
-
-<style>
-  body{font-family:system-ui,Arial,sans-serif;background:#f5f7fb;margin:0;padding:16px;display:flex;justify-content:center}
-  .card{width:100%;max-width:560px;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.08);padding:18px}
-  h1{margin:.2rem 0 1rem}
-  input,button{width:100%;padding:12px;border-radius:10px;border:1px solid #ccd2dd;margin:.35rem 0;font-size:16px}
-  button{background:#0b74de;color:#fff;border:none;font-weight:600}
-  #video{width:100%;height:auto;border-radius:12px;background:#000;margin-top:10px}
-  #status{margin-top:10px;font-weight:600}
-  .muted{color:#6b7280}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scanner – Superviseur</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f7fb;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 15px;
+      box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+      text-align: center;
+      width: 350px;
+    }
+    h2 {
+      margin-bottom: 20px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+    }
+    button {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      background: #007bff;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    .log {
+      background: #000;
+      color: #0f0;
+      font-family: monospace;
+      height: 150px;
+      overflow-y: auto;
+      text-align: left;
+      padding: 8px;
+      margin-top: 10px;
+      border-radius: 10px;
+    }
+  </style>
 </head>
 <body>
-<div class="card">
-  <h1>🔐 Scanner – Superviseur</h1>
+  <div class="container">
+    <h2>🔐 Scanner – Superviseur</h2>
 
-  <!-- 🔁 1) https://script.google.com/macros/s/AKfycbxOGgvQonRSqyySzGbwKc_pzsY8p8j5tSvWwW5S2iVPyzxfoiygxBe-guKgwMQT03x_Og/exec  -->
-  <input id="exec" placeholder="URL Web App /exec" value="https://script.google.com/macros/s/AKfycbxQoYaj-26s0z1a_PeuZFM9-v5S1OX60U0rp4zik9HnmVxxNlq5I_COIYTAS_PSJ-K0eQ/exec">
+    <!-- 🟢 Ton lien Apps Script ici -->
+    <input id="exec" placeholder="URL Web App /exec" value="https://script.google.com/macros/s/AKfycbxQoYaj-26s0z1a_PeuZFM9-v5S1OX60U0rp4zik9HnmVxxNlq5I_COIYTAS_PSJ-K0eQ/exec">
 
-  <!-- 🔁 2) SUP-TEAG-SOP097 -->
-  <input id="token" placeholder="Token superviseur" value="SUP-TEAG-SOP097">
+    <!-- 🟢 Ton token superviseur -->
+    <input id="token" placeholder="Token superviseur" value="SUP-TEAG-SOP097">
 
-  <button id="start">VÉRIFIER & DÉMARRER</button>
-  <div id="status" class="muted">Prêt.</div>
-  <video id="video" playsinline></video>
-</div>
+    <button onclick="verifier()">VÉRIFIER & DÉMARRER</button>
+    <div id="log" class="log"></div>
+    <div id="reader" style="margin-top:10px;"></div>
+  </div>
 
-<script>
-const $ = s => document.querySelector(s);
-const statusEl = $("#status"), video = $("#video"), btn = $("#start");
-let stream = null, detector = null;
+  <script>
+    function log(msg) {
+      const logBox = document.getElementById('log');
+      logBox.innerHTML += msg + "<br>";
+      logBox.scrollTop = logBox.scrollHeight;
+    }
 
-async function checkToken(execUrl, token){
-  const r = await fetch(execUrl + "?check=token&token=" + encodeURIComponent(token));
-  return (await r.text()).trim();
-}
+    async function verifier() {
+      const execUrl = document.getElementById('exec').value.trim();
+      const token = document.getElementById('token').value.trim();
+      log("Vérification du token...");
 
-async function startCamera(){
-  stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-  video.srcObject = stream;
-  await video.play();
-}
-
-async function scanLoop(execUrl, token){
-  if ('BarcodeDetector' in window) {
-    detector = new BarcodeDetector({ formats: ['qr_code'] });
-    const loop = async () => {
       try {
-        const codes = await detector.detect(video);
-        if (codes && codes.length){
-          const payload = codes[0].rawValue;
-          await sendToServer(execUrl, token, payload);
-          stopCamera();
-          return;
+        const res = await fetch(`${execUrl}?check=token&token=${encodeURIComponent(token)}`);
+        const text = await res.text();
+        if (text.includes("OK")) {
+          log("✅ Token validé. Ouverture caméra...");
+          demarrerScan(execUrl, token);
+        } else {
+          log("❌ Token invalide : " + text);
         }
-      } catch(e){}
-      requestAnimationFrame(loop);
-    };
-    loop();
-  } else {
-    statusEl.innerHTML = "⚠️ Votre navigateur ne supporte pas le scan (BarcodeDetector). Utilisez Chrome Android/iOS récent.";
-  }
-}
+      } catch (err) {
+        log("⚠️ Erreur de connexion : " + err.message);
+      }
+    }
 
-function addTokenToUrl(execUrl, token, payload){
-  if (payload.startsWith("http")) {
-    const u = new URL(payload);
-    if(!u.searchParams.get("token")) u.searchParams.set("token", token);
-    return u.toString();
-  }
-  // payload de type: "matricule=...&nom=...&prenom=...&equipe=...&type=..."
-  return execUrl + "?" + payload + "&token=" + encodeURIComponent(token);
-}
-
-async function sendToServer(execUrl, token, payload){
-  statusEl.textContent = "⏳ QR détecté, envoi...";
-  const finalUrl = addTokenToUrl(execUrl, token, payload);
-  const r = await fetch(finalUrl);
-  const txt = await r.text();
-  statusEl.innerHTML = "✅ " + txt;
-}
-
-function stopCamera(){ if (stream) stream.getTracks().forEach(t => t.stop()); }
-
-btn.addEventListener("click", async ()=>{
-  const execUrl = $("#exec").value.trim();
-  const token = $("#token").value.trim();
-  if(!execUrl || !token){ statusEl.innerHTML = "❌ Renseigne l’URL et le token."; return; }
-
-  statusEl.textContent = "⏳ Vérification du token…";
-  try{
-    const ok = await checkToken(execUrl, token);
-    if(!ok.startsWith("OK")){ statusEl.innerHTML = "❌ Token invalide."; return; }
-    statusEl.innerHTML = "✅ Token validé. Ouverture caméra…";
-    await startCamera();
-    await scanLoop(execUrl, token);
-  }catch(e){
-    statusEl.innerHTML = "❌ Erreur : " + e.message + '<br><span class="muted">Vérifie que le site a l’autorisation Caméra.</span>';
-  }
-});
-
-// Enregistrement service worker pour l’installation
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", ()=> navigator.serviceWorker.register("sw.js"));
-}
-</script>
+    function demarrerScan(execUrl, token) {
+      const html5QrCode = new Html5Qrcode("reader");
+      Html5Qrcode.getCameras().then(cameras => {
+        if (cameras && cameras.length) {
+          html5QrCode.start(
+            cameras[0].id,
+            { fps: 10, qrbox: 250 },
+            qrCodeMessage => {
+              log("📸 QR détecté : " + qrCodeMessage);
+              fetch(`${execUrl}?token=${encodeURIComponent(token)}&data=${encodeURIComponent(qrCodeMessage)}`)
+                .then(r => r.text())
+                .then(t => log("✅ " + t))
+                .catch(e => log("⚠️ Erreur d’envoi : " + e.message));
+            },
+            err => {}
+          );
+        } else {
+          log("⚠️ Aucune caméra détectée.");
+        }
+      }).catch(err => log("⚠️ Erreur caméra : " + err.message));
+    }
+  </script>
 </body>
 </html>
