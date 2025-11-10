@@ -1,11 +1,16 @@
 {
-  "name": "Scanner Superviseur",
-  "short_name": "Scanner",
-  "start_url": ".",
+  "name": "Superviseur QR Scanner",
+  "short_name": "QR Scanner",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#f5f7fb",
-  "theme_color": "#0b74de",
+  "background_color": "#007bff",
+  "theme_color": "#007bff",
+  "orientation": "portrait",
   "icons": [
-    { "src": "https://fav.farm/📷", "sizes": "192x192", "type": "image/png" }
+    {
+      "src": "logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
   ]
 }
