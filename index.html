@@ -3,28 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Scanner – Superviseur</title>
+  <title>Superviseur – QR Scanner</title>
   <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="logo.png" />
   <script src="https://unpkg.com/html5-qrcode"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #f5f7fb;
+      font-family: "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #0056b3, #007bff);
+      color: #333;
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
+      margin: 0;
     }
     .container {
       background: white;
       padding: 20px;
       border-radius: 15px;
-      box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+      box-shadow: 0 5px 25px rgba(0,0,0,0.2);
       text-align: center;
-      width: 350px;
+      width: 360px;
+    }
+    .logo {
+      width: 80px;
+      margin-bottom: 10px;
     }
     h2 {
-      margin-bottom: 20px;
+      color: #0056b3;
     }
     input {
       width: 100%;
@@ -42,6 +49,8 @@
       border: none;
       border-radius: 8px;
       cursor: pointer;
+      font-size: 15px;
+      font-weight: bold;
     }
     button:hover {
       background: #0056b3;
@@ -57,10 +66,17 @@
       margin-top: 10px;
       border-radius: 10px;
     }
+    select {
+      margin-top: 10px;
+      width: 100%;
+      padding: 8px;
+      border-radius: 6px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <img src="logo.png" alt="Logo" class="logo">
     <h2>🔐 Scanner – Superviseur</h2>
 
     <!-- 🟢 Ton lien Apps Script ici -->
@@ -70,11 +86,15 @@
     <input id="token" placeholder="Token superviseur" value="SUP-TEAG-SOP097">
 
     <button onclick="verifier()">VÉRIFIER & DÉMARRER</button>
+    <select id="cameraSelect"></select>
     <div id="log" class="log"></div>
     <div id="reader" style="margin-top:10px;"></div>
   </div>
 
   <script>
+    let html5QrCode;
+    let currentCameraId = null;
+
     function log(msg) {
       const logBox = document.getElementById('log');
       logBox.innerHTML += msg + "<br>";
@@ -91,7 +111,7 @@
         const text = await res.text();
         if (text.includes("OK")) {
           log("✅ Token validé. Ouverture caméra...");
-          demarrerScan(execUrl, token);
+          initCameras(execUrl, token);
         } else {
           log("❌ Token invalide : " + text);
         }
@@ -100,26 +120,50 @@
       }
     }
 
-    function demarrerScan(execUrl, token) {
-      const html5QrCode = new Html5Qrcode("reader");
-      Html5Qrcode.getCameras().then(cameras => {
-        if (cameras && cameras.length) {
-          html5QrCode.start(
-            cameras[0].id,
-            { fps: 10, qrbox: 250 },
-            qrCodeMessage => {
-              log("📸 QR détecté : " + qrCodeMessage);
-              fetch(`${execUrl}?token=${encodeURIComponent(token)}&data=${encodeURIComponent(qrCodeMessage)}`)
-                .then(r => r.text())
-                .then(t => log("✅ " + t))
-                .catch(e => log("⚠️ Erreur d’envoi : " + e.message));
-            },
-            err => {}
-          );
+    function initCameras(execUrl, token) {
+      Html5Qrcode.getCameras().then(devices => {
+        const cameraSelect = document.getElementById("cameraSelect");
+        cameraSelect.innerHTML = "";
+        devices.forEach((d, i) => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.text = d.label || `Caméra ${i + 1}`;
+          cameraSelect.appendChild(opt);
+        });
+
+        if (devices.length > 1) {
+          const backCamera = devices.find(d => d.label.toLowerCase().includes("back")) || devices[1];
+          currentCameraId = backCamera.id;
         } else {
-          log("⚠️ Aucune caméra détectée.");
+          currentCameraId = devices[0].id;
         }
-      }).catch(err => log("⚠️ Erreur caméra : " + err.message));
+
+        cameraSelect.value = currentCameraId;
+        cameraSelect.addEventListener("change", e => {
+          currentCameraId = e.target.value;
+          startScanner(execUrl, token);
+        });
+
+        startScanner(execUrl, token);
+      }).catch(err => log("⚠️ Erreur d’accès à la caméra : " + err.message));
+    }
+
+    function startScanner(execUrl, token) {
+      if (html5QrCode) html5QrCode.stop();
+      html5QrCode = new Html5Qrcode("reader");
+
+      html5QrCode.start(
+        currentCameraId,
+        { fps: 10, qrbox: 250 },
+        qrCodeMessage => {
+          log("📸 QR détecté : " + qrCodeMessage);
+          fetch(`${execUrl}?token=${encodeURIComponent(token)}&data=${encodeURIComponent(qrCodeMessage)}`)
+            .then(r => r.text())
+            .then(t => log("✅ " + t))
+            .catch(e => log("⚠️ Erreur d’envoi : " + e.message));
+        },
+        err => {}
+      );
     }
   </script>
 </body>
