@@ -40,6 +40,11 @@
       border-radius: 8px;
       border: 1px solid #ccc;
     }
+    input[readonly] {
+      background: #f0f0f0;
+      color: #777;
+      cursor: not-allowed;
+    }
     button {
       width: 100%;
       padding: 10px;
@@ -72,6 +77,14 @@
       padding: 8px;
       border-radius: 6px;
     }
+    #scanner-section {
+      display: none;
+    }
+    #welcome {
+      color: #007bff;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -79,24 +92,39 @@
     <img src="logo.png" alt="Logo" class="logo">
     <h2>🔐 Scanner – Superviseur</h2>
 
-    <!-- 🟢 Ton lien Apps Script ici -->
-    <input id="exec" placeholder="URL Web App /exec" value="https://script.google.com/macros/s/AKfycbxQoYaj-26s0z1a_PeuZFM9-v5S1OX60U0rp4zik9HnmVxxNlq5I_COIYTAS_PSJ-K0eQ/exec">
+    <!-- 🟢 Section connexion -->
+    <div id="login-section">
+      <input id="exec" placeholder="URL Web App /exec"
+        value="https://script.google.com/macros/s/AKfycbxQoYaj-26s0z1a_PeuZFM9-v5S1OX60U0rp4zik9HnmVxxNlq5I_COIYTAS_PSJ-K0eQ/exec"
+        readonly>
+      <input id="token" placeholder="Token superviseur">
+      <button onclick="verifier()">Se connecter</button>
+      <div id="login-log" class="log"></div>
+    </div>
 
-    <!-- 🟢 Ton token superviseur -->
-    <input id="token" placeholder="Token superviseur" value="SUP-TEAG-SOP097">
-
-    <button onclick="verifier()">VÉRIFIER & DÉMARRER</button>
-    <select id="cameraSelect"></select>
-    <div id="log" class="log"></div>
-    <div id="reader" style="margin-top:10px;"></div>
+    <!-- 🟢 Section scanner -->
+    <div id="scanner-section">
+      <div id="welcome"></div>
+      <select id="cameraSelect"></select>
+      <button onclick="changerSuperviseur()">🔁 Changer de superviseur</button>
+      <div id="log" class="log"></div>
+      <div id="reader" style="margin-top:10px;"></div>
+    </div>
   </div>
 
   <script>
     let html5QrCode;
     let currentCameraId = null;
 
-    function log(msg) {
-      const logBox = document.getElementById('log');
+    // 🟢 Liste des superviseurs et tokens
+    const superviseurs = {
+      "SUP-TEAG-SOP097": "TEA GONYATOU MARCEL",
+      "HSE-GOUNT-SOP089": "GOUN TOKOUAHO DANIELLE",
+      "HSE-TRAHAD-SOP096": "TRAHA DYANE MARILYSE"
+    };
+
+    function log(msg, target = "log") {
+      const logBox = document.getElementById(target);
       logBox.innerHTML += msg + "<br>";
       logBox.scrollTop = logBox.scrollHeight;
     }
@@ -104,20 +132,34 @@
     async function verifier() {
       const execUrl = document.getElementById('exec').value.trim();
       const token = document.getElementById('token').value.trim();
-      log("Vérification du token...");
+      const loginLog = document.getElementById('login-log');
+      loginLog.innerHTML = "🔍 Vérification du token...";
 
       try {
         const res = await fetch(`${execUrl}?check=token&token=${encodeURIComponent(token)}`);
         const text = await res.text();
         if (text.includes("OK")) {
-          log("✅ Token validé. Ouverture caméra...");
+          const nom = superviseurs[token] || "Superviseur inconnu";
+          document.getElementById("welcome").innerHTML = `👋 Bonjour <strong>${nom}</strong>, vous pouvez commencer le scan.`;
+          loginLog.innerHTML = "✅ Token validé. Préparation du scanner...";
+          document.getElementById("login-section").style.display = "none";
+          document.getElementById("scanner-section").style.display = "block";
           initCameras(execUrl, token);
         } else {
-          log("❌ Token invalide : " + text);
+          loginLog.innerHTML = "❌ Token invalide.";
         }
       } catch (err) {
-        log("⚠️ Erreur de connexion : " + err.message);
+        loginLog.innerHTML = "⚠️ Erreur de connexion : " + err.message;
       }
+    }
+
+    function changerSuperviseur() {
+      if (html5QrCode) html5QrCode.stop();
+      document.getElementById("scanner-section").style.display = "none";
+      document.getElementById("login-section").style.display = "block";
+      document.getElementById("token").value = "";
+      document.getElementById("login-log").innerHTML = "";
+      document.getElementById("welcome").innerHTML = "";
     }
 
     function initCameras(execUrl, token) {
