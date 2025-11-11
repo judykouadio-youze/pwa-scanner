@@ -6,7 +6,6 @@
   <title>Scanner – Superviseur</title>
   <link rel="manifest" href="manifest.webmanifest" />
   <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-
   <style>
     body {
       font-family: "Segoe UI", sans-serif;
@@ -14,7 +13,7 @@
       justify-content: center;
       align-items: center;
       height: 100vh;
-      background: linear-gradient(135deg, #0a58ca, #1e90ff);
+      background: linear-gradient(135deg, #0052cc, #007bff);
       margin: 0;
     }
     .container {
@@ -28,10 +27,15 @@
     }
     h1 {
       color: #003366;
-      font-size: 1.5rem;
-      margin-bottom: 15px;
+      font-size: 1.4rem;
+      margin-bottom: 10px;
     }
-    input, select, button {
+    #welcome {
+      font-weight: bold;
+      color: #007bff;
+      margin-bottom: 10px;
+    }
+    input, button {
       width: 100%;
       padding: 10px;
       margin-top: 10px;
@@ -50,119 +54,118 @@
       cursor: pointer;
       transition: background 0.3s;
     }
-    button:hover {
-      background: #0056b3;
-    }
+    button:hover { background: #0056b3; }
     #log {
       background: black;
       color: #00ff00;
       padding: 10px;
       border-radius: 8px;
       margin-top: 15px;
-      height: 130px;
+      height: 140px;
       overflow-y: auto;
       text-align: left;
       font-family: monospace;
       font-size: 0.85rem;
     }
-    #reader {
-      width: 100%;
-      margin-top: 10px;
-    }
-    img.logo {
-      width: 150px;
-      margin-bottom: 10px;
-    }
+    #reader { width: 100%; margin-top: 10px; }
+    img.logo { width: 140px; margin-bottom: 10px; }
   </style>
 </head>
-
 <body>
   <div class="container">
-    <img src="https://i.imgur.com/2NYN8Wr.png" alt="Logo" class="logo" />
+    <img src="https://i.imgur.com/2NYN8Wr.png" alt="Logo SOPREMI" class="logo" />
     <h1>🔒 Scanner – Superviseur</h1>
+    <div id="welcome"></div>
 
-    <!-- Champ lien figé -->
-    <input id="exec" readonly value="https://script.google.com/macros/s/AKfycbxVINVZqAay6-pRlrUHYcyCuTNb6ieqJp154nVb5ylxF3wS7BK8zenKATZ3wSZRow/exec">
+    <!-- Champ URL WebApp (non modifiable) -->
+    <input id="exec" readonly 
+      value="https://script.google.com/macros/s/TON_NOUVEAU_CODE_EXEC/exec">
 
     <!-- Champ token superviseur -->
     <input id="token" placeholder="Entrez votre token superviseur">
 
-    <button id="btnStart">Se connecter</button>
+    <!-- Bouton de connexion -->
+    <button id="btnLogin">Se connecter</button>
 
+    <!-- Zone de log -->
     <div id="log"></div>
+
+    <!-- Zone vidéo QR -->
     <div id="reader"></div>
   </div>
 
   <script>
     const logDiv = document.getElementById("log");
+    const welcomeDiv = document.getElementById("welcome");
+    let html5QrCode;
+    let currentSupervisor = "";
+
+    // Affichage dans la console visuelle
     function log(msg) {
       logDiv.innerHTML += msg + "<br>";
       logDiv.scrollTop = logDiv.scrollHeight;
     }
 
-    let html5QrCode;
-    let cameraId = null;
-
-    // 🔹 Fonction principale : démarrer le scanner
-    async function startScanner(execUrl, token) {
-      log("🔍 Vérification du token...");
-      try {
-        const test = await fetch(`${execUrl}?token=${token}`);
-        const text = await test.text();
-        if (!text.includes("Employé") && !text.includes("✅")) {
-          log("❌ Token invalide ou refusé.");
-          return;
-        }
-      } catch {
-        log("⚠️ Impossible de vérifier le token.");
-        return;
-      }
-
-      log("✅ Token validé. Ouverture de la caméra...");
-
-      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
-
+    // Fonction principale pour démarrer le scanner
+    async function startScanner(execUrl) {
       const cameras = await Html5Qrcode.getCameras();
-      if (cameras && cameras.length) {
-        // Utiliser la caméra arrière si disponible
-        const backCam = cameras.find(cam => cam.label.toLowerCase().includes("back")) || cameras[0];
-        cameraId = backCam.id;
-      } else {
+      if (!cameras.length) {
         log("❌ Aucune caméra détectée.");
         return;
       }
 
+      // Sélection automatique de la caméra arrière si disponible
+      const cam = cameras.find(c => c.label.toLowerCase().includes("back")) || cameras[0];
+      if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+
       await html5QrCode.start(
-        cameraId,
+        cam.id,
         { fps: 10, qrbox: 250 },
         (decodedText) => {
           log("📸 QR détecté : " + decodedText);
           let matricule = decodedText;
+
           try {
-            const u = new URL(decodedText);
-            const m = u.searchParams.get("matricule");
+            const url = new URL(decodedText);
+            const m = url.searchParams.get("matricule");
             if (m) matricule = m;
           } catch {}
-          
-          fetch(`${execUrl}?token=${encodeURIComponent(token)}&matricule=${encodeURIComponent(matricule)}`)
+
+          // Envoi du scan à Google Apps Script
+          fetch(`${execUrl}?matricule=${encodeURIComponent(matricule)}&superviseur=${encodeURIComponent(currentSupervisor)}`)
             .then(res => res.text())
-            .then(txt => log("✅ " + txt))
+            .then(txt => log(txt))
             .catch(err => log("⚠️ Erreur d’envoi : " + err.message));
         },
-        (error) => {}
+        (err) => {}
       );
     }
 
-    // 🔹 Bouton "Se connecter"
-    document.getElementById("btnStart").addEventListener("click", () => {
-      const execUrl = document.getElementById("exec").value.trim();
+    // Bouton de connexion superviseur
+    document.getElementById("btnLogin").addEventListener("click", async () => {
+      const execUrl = document.getElementById("exec").value;
       const token = document.getElementById("token").value.trim();
 
-      if (!execUrl || !token) {
-        log("⚠️ Veuillez entrer un token valide.");
+      if (!token) {
+        log("⚠️ Veuillez entrer votre token superviseur.");
         return;
       }
-      startScanner(execUrl, token);
+
+      log("🔍 Vérification du token...");
+      try {
+        const res = await fetch(`${execUrl}?token=${encodeURIComponent(token)}`);
+        const data = await res.json();
+        if (data.ok) {
+          currentSupervisor = data.superviseur;
+          welcomeDiv.innerHTML = `👋 Bonjour <span style="color:#003366;">${data.superviseur}</span>, vous pouvez commencer le scan.`;
+          log("✅ Token validé, ouverture de la caméra...");
+          startScanner(execUrl);
+        } else {
+          log("❌ " + data.message);
+        }
+      } catch (err) {
+        log("⚠️ Erreur de vérification : " + err.message);
+      }
     });
   </script>
 </body>
