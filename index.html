@@ -190,23 +190,36 @@
       }).catch(err => log("⚠️ Erreur d’accès à la caméra : " + err.message));
     }
 
-    function startScanner(execUrl, token) {
-      if (html5QrCode) html5QrCode.stop();
-      html5QrCode = new Html5Qrcode("reader");
+   <script>
+  // ... le reste inchangé au-dessus
 
-      html5QrCode.start(
-        currentCameraId,
-        { fps: 10, qrbox: 250 },
-        qrCodeMessage => {
-          log("📸 QR détecté : " + qrCodeMessage);
-          fetch(`${execUrl}?token=${encodeURIComponent(token)}&data=${encodeURIComponent(qrCodeMessage)}`)
-            .then(r => r.text())
-            .then(t => log("✅ " + t))
-            .catch(e => log("⚠️ Erreur d’envoi : " + e.message));
-        },
-        err => {}
-      );
-    }
-  </script>
-</body>
-</html>
+  function startScanner(execUrl, token) {
+    if (html5QrCode) html5QrCode.stop();
+    html5QrCode = new Html5Qrcode("reader");
+
+    html5QrCode.start(
+      currentCameraId,
+      { fps: 10, qrbox: 250 },
+      qrCodeMessage => {
+        log("📸 QR détecté : " + qrCodeMessage);
+
+        // ➜ Rendre le scanner tolérant : si on lit une URL, on en tire le matricule
+        let matriculeOrData = qrCodeMessage;
+        try {
+          const u = new URL(qrCodeMessage);
+          const m = u.searchParams.get('matricule');
+          if (m) matriculeOrData = m;       // on garde juste "SROO2"
+        } catch (e) {
+          // ce n'est pas une URL : on garde tel quel (ex: "SROO2")
+        }
+
+        // ➜ Envoyer au script avec un paramètre clair "matricule"
+        fetch(`${execUrl}?token=${encodeURIComponent(token)}&matricule=${encodeURIComponent(matriculeOrData)}`, { cache: "no-store" })
+          .then(r => r.text())
+          .then(t => log("✅ " + t))
+          .catch(e => log("⚠️ Erreur d’envoi : " + e.message));
+      },
+      err => {}
+    );
+  }
+</script>
