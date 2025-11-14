@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Scanner – SOPREMI</title>
 
-<!-- DESIGN -->
 <style>
     body {
         margin: 0;
@@ -27,7 +26,7 @@
         width: 200px;
         margin-bottom: 10px;
     }
-    input, button, select {
+    input, button {
         width: 92%;
         padding: 12px;
         margin-top: 10px;
@@ -58,22 +57,22 @@
     }
 </style>
 
-<!-- HTML5 QR CODE LIBRARY -->
-<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 
 </head>
 <body>
 
 <div class="box">
 
-    <!-- TON LOGO (déjà dans GitHub) -->
     <img src="logo.png" class="logo" />
 
     <h2>🔒 Scanner – Superviseur</h2>
     <p>Entrez votre token pour démarrer</p>
 
     <!-- URL FIXE -->
-    <input id="execUrl" value="https://script.google.com/macros/s/AKfycby9FgvP9BpAh2OU8I7gN6OtmmHgxgalo7tQLzRw7XkqxjCMQ7aSoEzUJz5gIJjUxNdx/exec" readonly />
+    <input id="execUrl" 
+           value="https://script.google.com/macros/s/AKfycby9FgvP9BpAh2OU8I7gN6OtmmHgxgalo7tQLzRw7XkqxjCMQ7aSoEzUJz5gIJjUxNdx/exec" 
+           readonly />
 
     <!-- TOKEN -->
     <input id="token" placeholder="Votre token superviseur" />
@@ -88,14 +87,16 @@
 </div>
 
 <script>
-let superviseur = null;
 
-// ÉCRIT DANS LA CONSOLE
+let superviseur = null;
+let lastScan = 0;
+
+// AFFICHAGE LOG
 function log(msg) {
     document.getElementById("console").innerHTML += "<div>" + msg + "</div>";
 }
 
-// BOUTON SE CONNECTER
+// CONNEXION DU SUPERVISEUR
 async function connect() {
     log("🔍 Vérification du token...");
 
@@ -111,6 +112,7 @@ async function connect() {
         if (!data.ok) return log("❌ " + data.message);
 
         superviseur = data.superviseur;
+        localStorage.setItem("superviseur", superviseur);
 
         log("✅ Token validé : " + superviseur);
         startScanner();
@@ -120,28 +122,46 @@ async function connect() {
     }
 }
 
-// DÉMARRER LE SCANNER
+// DEMARRAGE DU SCANNER
 function startScanner() {
     log("📷 Ouverture de la caméra...");
 
     const html5Qr = new Html5Qrcode("reader");
 
     html5Qr.start(
-        { facingMode: "environment" },  // caméra arrière
+        { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 } },
         (qrText) => handleQR(qrText),
         () => {}
     );
 }
 
-// LECTURE DU QR CODE
+// LECTURE QR CODE
 async function handleQR(code) {
+
+    const now = Date.now();
+    if (now - lastScan < 2000) return; // anti-multi-scan
+    lastScan = now;
+
     log("📦 QR détecté : " + code);
 
     const url = document.getElementById("execUrl").value;
+    const sup = localStorage.getItem("superviseur");
+
+    if (!sup) return log("❌ Aucun superviseur trouvé");
+
+    // Extraire matricule depuis ?matricule=SROO2
+    const params = new URLSearchParams(code);
+    const matricule = params.get("matricule");
+
+    if (!matricule) return log("❌ QR invalide");
+
+    const finalURL = url + "?matricule=" + matricule + "&superviseur=" + encodeURIComponent(sup);
+
+    log(finalURL);
 
     try {
-        const response = await fetch(url + code);
+        const response = await fetch(finalURL);
         const data = await response.json();
 
         if (!data.ok) return log("❌ " + data.message);
@@ -152,6 +172,7 @@ async function handleQR(code) {
         log("❌ Erreur d’envoi : " + err);
     }
 }
+
 </script>
 
 </body>
